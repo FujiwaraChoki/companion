@@ -1,12 +1,12 @@
 {
-  "name": "the-vibe-companion",
+  "name": "companion",
   "version": "0.9.0",
   "type": "module",
   "description": "Web UI for launching and interacting with Claude Code agents",
   "license": "MIT",
   "author": "The Vibe Company",
   "bin": {
-    "the-vibe-companion": "./bin/cli.ts"
+    "companion": "./bin/cli.ts"
   },
   "files": [
     "bin/",
@@ -35,6 +35,7 @@
     "test": "bun test"
   },
   "dependencies": {
+    "highlight.js": "^11.11.1",
     "hono": "^4.7.0"
   },
   "devDependencies": {

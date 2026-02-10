@@ -1,16 +1,23 @@
 {
-  "name": "the-vibe-companion",
+  "name": "companion",
   "version": "0.9.0",
   "private": true,
   "description": "Web UI for Claude Code agents",
+  "main": "dist-electron/main.js",
   "scripts": {
     "dev": "cd web && bun run dev",
     "build": "cd web && bun run build",
-    "start": "cd web && bun run start"
+    "start": "cd web && bun run start",
+    "electron:compile": "tsc -p electron/tsconfig.json",
+    "electron:dev": "npm run electron:compile && ELECTRON_DEV_URL=http://localhost:5174 electron dist-electron/main.js",
+    "electron:start": "npm run build && npm run electron:compile && electron dist-electron/main.js",
+    "electron:pack": "npm run build && npm run electron:compile && electron-builder --config electron-builder.config.ts"
   },
   "author": "The Vibe Company",
   "license": "MIT",
-  "dependencies": {
-    "the-vibe-companion": "^0.2.2"
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0",
+    "typescript": "^5.9.3"
   }
 }

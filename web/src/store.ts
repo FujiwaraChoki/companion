@@ -1,6 +1,14 @@
 import { create } from "zustand";
 import type { SessionState, PermissionRequest, ChatMessage, SdkSessionInfo, TaskItem } from "./types.js";
 
+export interface Toast {
+  id: string;
+  message: string;
+  variant: "success" | "error" | "info";
+  duration?: number;
+  action?: { label: string; onClick: () => void };
+}
+
 interface AppState {
   // Sessions
   sessions: Map<string, SessionState>;
@@ -41,6 +49,19 @@ interface AppState {
   sidebarOpen: boolean;
   taskPanelOpen: boolean;
   homeResetKey: number;
+
+  // Toast notifications
+  toasts: Toast[];
+
+  // Lightbox
+  lightboxSrc: string | null;
+
+  // Command palette
+  commandPaletteOpen: boolean;
+
+  // Resizable panels
+  sidebarWidth: number;
+  taskPanelWidth: number;
 
   // Actions
   setDarkMode: (v: boolean) => void;
@@ -83,6 +104,20 @@ interface AppState {
   setCliConnected: (sessionId: string, connected: boolean) => void;
   setSessionStatus: (sessionId: string, status: "idle" | "running" | "compacting" | null) => void;
 
+  // Toast actions
+  addToast: (toast: Omit<Toast, "id">) => void;
+  removeToast: (id: string) => void;
+
+  // Lightbox actions
+  setLightboxSrc: (src: string | null) => void;
+
+  // Command palette actions
+  setCommandPaletteOpen: (open: boolean) => void;
+
+  // Panel resize actions
+  setSidebarWidth: (width: number) => void;
+  setTaskPanelWidth: (width: number) => void;
+
   reset: () => void;
 }
 
@@ -107,6 +142,18 @@ function getInitialDarkMode(): boolean {
   return window.matchMedia("(prefers-color-scheme: dark)").matches;
 }
 
+function getInitialPanelWidth(key: string, fallback: number): number {
+  if (typeof window === "undefined") return fallback;
+  const stored = localStorage.getItem(key);
+  if (stored !== null) {
+    const n = parseInt(stored, 10);
+    if (!isNaN(n)) return n;
+  }
+  return fallback;
+}
+
+let toastIdCounter = 0;
+
 export const useStore = create<AppState>((set) => ({
   sessions: new Map(),
   sdkSessions: [],
@@ -126,6 +173,11 @@ export const useStore = create<AppState>((set) => ({
   sidebarOpen: typeof window !== "undefined" ? window.innerWidth >= 768 : true,
   taskPanelOpen: typeof window !== "undefined" ? window.innerWidth >= 1024 : false,
   homeResetKey: 0,
+  toasts: [],
+  lightboxSrc: null,
+  commandPaletteOpen: false,
+  sidebarWidth: getInitialPanelWidth("cc-sidebar-width", 260),
+  taskPanelWidth: getInitialPanelWidth("cc-taskpanel-width", 280),
 
   setDarkMode: (v) => {
     localStorage.setItem("cc-dark-mode", String(v));
@@ -358,6 +410,30 @@ export const useStore = create<AppState>((set) => ({
       sessionStatus.set(sessionId, status);
       return { sessionStatus };
     }),
+
+  addToast: (toast) =>
+    set((s) => ({
+      toasts: [...s.toasts, { ...toast, id: `toast-${++toastIdCounter}` }],
+    })),
+
+  removeToast: (id) =>
+    set((s) => ({
+      toasts: s.toasts.filter((t) => t.id !== id),
+    })),
+
+  setLightboxSrc: (src) => set({ lightboxSrc: src }),
+
+  setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open }),
+
+  setSidebarWidth: (width) => {
+    localStorage.setItem("cc-sidebar-width", String(width));
+    set({ sidebarWidth: width });
+  },
+
+  setTaskPanelWidth: (width) => {
+    localStorage.setItem("cc-taskpanel-width", String(width));
+    set({ taskPanelWidth: width });
+  },
 
   reset: () =>
     set({

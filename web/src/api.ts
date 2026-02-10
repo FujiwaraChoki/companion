@@ -138,6 +138,9 @@ export const api = {
   getHome: () =>
     get<{ home: string; cwd: string }>("/fs/home"),
 
+  pickFolder: () =>
+    post<{ path?: string; cancelled?: boolean }>("/fs/pick-folder"),
+
   // Environments
   listEnvs: () => get<CompanionEnv[]>("/envs"),
   getEnv: (slug: string) => get<CompanionEnv>(`/envs/${encodeURIComponent(slug)}`),

@@ -49,7 +49,22 @@ function getRecentDirs(): string[] {
 function addRecentDir(dir: string) {
   const dirs = getRecentDirs().filter((d) => d !== dir);
   dirs.unshift(dir);
-  localStorage.setItem(RECENT_DIRS_KEY, JSON.stringify(dirs.slice(0, 5)));
+  localStorage.setItem(RECENT_DIRS_KEY, JSON.stringify(dirs.slice(0, 8)));
+}
+
+function removeRecentDir(dir: string) {
+  const dirs = getRecentDirs().filter((d) => d !== dir);
+  localStorage.setItem(RECENT_DIRS_KEY, JSON.stringify(dirs));
+}
+
+function shortenPath(fullPath: string): string {
+  const home = fullPath.startsWith("/Users/")
+    ? `/Users/${fullPath.split("/")[2]}`
+    : "";
+  if (home && fullPath.startsWith(home)) {
+    return "~" + fullPath.slice(home.length);
+  }
+  return fullPath;
 }
 
 let idCounter = 0;
@@ -78,8 +93,8 @@ export function HomePage() {
   const [browsePath, setBrowsePath] = useState("");
   const [browseDirs, setBrowseDirs] = useState<DirEntry[]>([]);
   const [browseLoading, setBrowseLoading] = useState(false);
-  const [dirInput, setDirInput] = useState("");
-  const [showDirInput, setShowDirInput] = useState(false);
+  const [recentDirs, setRecentDirs] = useState(() => getRecentDirs());
+  const [pickingFolder, setPickingFolder] = useState(false);
 
   // Worktree state
   const [gitRepoInfo, setGitRepoInfo] = useState<GitRepoInfo | null>(null);
@@ -126,7 +141,6 @@ export function HomePage() {
       }
       if (dirDropdownRef.current && !dirDropdownRef.current.contains(e.target as Node)) {
         setShowDirDropdown(false);
-        setShowDirInput(false);
       }
       if (envDropdownRef.current && !envDropdownRef.current.contains(e.target as Node)) {
         setShowEnvDropdown(false);
@@ -266,7 +280,10 @@ export function HomePage() {
       useStore.getState().setSessionName(sessionId, sessionName);
 
       // Save cwd to recent dirs
-      if (cwd) addRecentDir(cwd);
+      if (cwd) {
+        addRecentDir(cwd);
+        setRecentDirs(getRecentDirs());
+      }
 
       // Store the permission mode for this session
       useStore.getState().setPreviousPermissionMode(sessionId, mode);
@@ -303,26 +320,73 @@ export function HomePage() {
   const canSend = text.trim().length > 0 && !sending;
 
   return (
-    <div className="flex-1 h-full flex items-center justify-center px-3 sm:px-4">
-      <div className="w-full max-w-2xl">
+    <div className="flex-1 h-full flex items-center justify-center px-3 sm:px-4 bg-noise">
+      <div className="w-full max-w-2xl relative z-10 animate-[fadeSlideIn_0.4s_ease-out]">
         {/* Title */}
-        <h1 className="text-xl sm:text-2xl font-semibold text-cc-fg text-center mb-4 sm:mb-6">
-          The Vibe Companion
-        </h1>
+        <div className="text-center mb-6 sm:mb-8">
+          <h1 className="font-display text-3xl sm:text-4xl font-semibold text-cc-fg tracking-tight mb-2" style={{ fontVariationSettings: "'SOFT' 100, 'WONK' 1" }}>
+            Companion
+          </h1>
+          <p className="text-sm text-cc-muted font-sans-ui">
+            What would you like to build?
+          </p>
+        </div>
+
+        {/* Recent project chips */}
+        {recentDirs.length > 0 && (
+          <div className="flex items-center gap-2 mb-4 overflow-x-auto pb-1 scrollbar-thin animate-[fadeIn_0.3s_ease-out]">
+            {recentDirs.map((dir) => {
+              const folderName = dir.split("/").pop() || dir;
+              const shortPath = shortenPath(dir.split("/").slice(0, -1).join("/"));
+              const isSelected = cwd === dir;
+              return (
+                <button
+                  key={dir}
+                  onClick={() => {
+                    setCwd(dir);
+                    addRecentDir(dir);
+                    setRecentDirs(getRecentDirs());
+                  }}
+                  className={`group relative flex flex-col items-start shrink-0 px-3 py-2 rounded-xl border text-left transition-all duration-150 cursor-pointer btn-press ${
+                    isSelected
+                      ? "bg-cc-primary/10 border-cc-primary/30 text-cc-primary"
+                      : "bg-cc-card border-cc-border text-cc-fg hover:border-cc-primary/20 hover:bg-cc-hover"
+                  }`}
+                >
+                  <span className="text-xs font-semibold leading-tight">{folderName}</span>
+                  <span className="text-[10px] text-cc-muted font-mono-code leading-tight mt-0.5">{shortPath}</span>
+                  <span
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removeRecentDir(dir);
+                      setRecentDirs(getRecentDirs());
+                      if (cwd === dir) setCwd(getRecentDirs()[0] || "");
+                    }}
+                    className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-cc-muted/80 text-white flex items-center justify-center text-[8px] opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer hover:bg-cc-error"
+                  >
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="w-2 h-2">
+                      <path d="M4 4l8 8M12 4l-8 8" />
+                    </svg>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         {/* Image thumbnails */}
         {images.length > 0 && (
-          <div className="flex items-center gap-2 mb-2 flex-wrap">
+          <div className="flex items-center gap-2 mb-3 flex-wrap animate-[fadeIn_0.2s_ease-out]">
             {images.map((img, i) => (
               <div key={i} className="relative group">
                 <img
                   src={`data:${img.mediaType};base64,${img.base64}`}
                   alt={img.name}
-                  className="w-12 h-12 rounded-lg object-cover border border-cc-border"
+                  className="w-14 h-14 rounded-xl object-cover border border-cc-border shadow-card"
                 />
                 <button
                   onClick={() => removeImage(i)}
-                  className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-cc-error text-white flex items-center justify-center text-[10px] opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                  className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-cc-error text-white flex items-center justify-center text-[10px] opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer shadow-sm btn-press"
                 >
                   <svg viewBox="0 0 16 16" fill="currentColor" className="w-2.5 h-2.5">
                     <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none" />
@@ -344,7 +408,7 @@ export function HomePage() {
         />
 
         {/* Input card */}
-        <div className="bg-cc-card border border-cc-border rounded-[14px] shadow-sm overflow-hidden">
+        <div className="bg-cc-card border border-cc-border rounded-2xl shadow-card-lg overflow-hidden transition-shadow duration-300 hover:shadow-[0_2px_4px_rgba(0,0,0,0.03),0_12px_40px_rgba(0,0,0,0.08),0_0_0_1px_rgba(0,0,0,0.03)]">
           <textarea
             ref={textareaRef}
             value={text}
@@ -353,8 +417,8 @@ export function HomePage() {
             onPaste={handlePaste}
             placeholder="Fix a bug, build a feature, refactor code..."
             rows={4}
-            className="w-full px-4 pt-4 pb-2 text-sm bg-transparent resize-none focus:outline-none text-cc-fg font-sans-ui placeholder:text-cc-muted"
-            style={{ minHeight: "100px", maxHeight: "300px" }}
+            className="w-full px-5 pt-5 pb-2 text-[15px] bg-transparent resize-none focus:outline-none text-cc-fg font-sans-ui placeholder:text-cc-muted/60 leading-relaxed"
+            style={{ minHeight: "110px", maxHeight: "300px" }}
           />
 
           {/* Bottom toolbar */}
@@ -363,18 +427,18 @@ export function HomePage() {
             <div className="relative" ref={modeDropdownRef}>
               <button
                 onClick={() => setShowModeDropdown(!showModeDropdown)}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-cc-muted hover:text-cc-fg rounded-lg hover:bg-cc-hover transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-cc-muted hover:text-cc-fg rounded-lg hover:bg-cc-hover transition-all duration-150 cursor-pointer btn-press"
               >
                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3.5 h-3.5">
                   <path d="M2 4h12M2 8h8M2 12h10" strokeLinecap="round" />
                 </svg>
                 {selectedMode.label}
-                <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 opacity-50">
+                <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 opacity-40">
                   <path d="M4 6l4 4 4-4" />
                 </svg>
               </button>
               {showModeDropdown && (
-                <div className="absolute left-0 bottom-full mb-1 w-40 bg-cc-card border border-cc-border rounded-[10px] shadow-lg z-10 py-1 overflow-hidden">
+                <div className="absolute left-0 bottom-full mb-1 w-40 bg-cc-card border border-cc-border rounded-xl shadow-dropdown z-10 py-1 overflow-hidden animate-[scaleIn_0.15s_ease-out]">
                   {MODES.map((m) => (
                     <button
                       key={m.value}
@@ -395,7 +459,7 @@ export function HomePage() {
               {/* Image upload */}
               <button
                 onClick={() => fileInputRef.current?.click()}
-                className="flex items-center justify-center w-8 h-8 rounded-lg text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
+                className="flex items-center justify-center w-8 h-8 rounded-lg text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-all duration-150 cursor-pointer btn-press"
                 title="Upload image"
               >
                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
@@ -409,9 +473,9 @@ export function HomePage() {
               <button
                 onClick={handleSend}
                 disabled={!canSend}
-                className={`flex items-center justify-center w-8 h-8 rounded-full transition-colors ${
+                className={`flex items-center justify-center w-9 h-9 rounded-xl transition-all duration-200 btn-press ${
                   canSend
-                    ? "bg-cc-primary hover:bg-cc-primary-hover text-white cursor-pointer"
+                    ? "bg-cc-primary hover:bg-cc-primary-hover text-white cursor-pointer shadow-sm hover:shadow-md"
                     : "bg-cc-hover text-cc-muted cursor-not-allowed"
                 }`}
                 title="Send message"
@@ -425,134 +489,123 @@ export function HomePage() {
         </div>
 
         {/* Below-card selectors */}
-        <div className="flex items-center gap-1 sm:gap-3 mt-2 sm:mt-3 px-1 flex-wrap">
+        <div className="flex items-center gap-1 sm:gap-2 mt-3 sm:mt-4 px-1 flex-wrap">
           {/* Folder selector */}
           <div className="relative" ref={dirDropdownRef}>
             <button
               onClick={() => {
                 if (!showDirDropdown) {
                   setShowDirDropdown(true);
-                  setShowDirInput(false);
                   loadDirs(cwd || undefined);
                 } else {
                   setShowDirDropdown(false);
                 }
               }}
-              className="flex items-center gap-1.5 px-2 py-1 text-xs text-cc-muted hover:text-cc-fg rounded-md hover:bg-cc-hover transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-cc-muted hover:text-cc-fg rounded-lg hover:bg-cc-hover transition-all duration-150 cursor-pointer btn-press"
             >
-              <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5 opacity-60">
+              <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5 opacity-50">
                 <path d="M1 3.5A1.5 1.5 0 012.5 2h3.379a1.5 1.5 0 011.06.44l.622.621a.5.5 0 00.353.146H13.5A1.5 1.5 0 0115 4.707V12.5a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 011 12.5v-9z" />
               </svg>
-              <span className="max-w-[200px] truncate font-mono-code">{dirLabel}</span>
-              <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 opacity-50">
+              <span className="max-w-[200px] truncate font-mono-code text-[11px]">{dirLabel}</span>
+              <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 opacity-40">
                 <path d="M4 6l4 4 4-4" />
               </svg>
             </button>
             {showDirDropdown && (
-              <div className="absolute left-0 top-full mt-1 w-80 max-w-[calc(100vw-2rem)] max-h-[min(400px,60vh)] flex flex-col bg-cc-card border border-cc-border rounded-[10px] shadow-lg z-10 overflow-hidden">
-                {/* Current path display + manual input toggle */}
+              <div className="absolute left-0 top-full mt-1 w-80 max-w-[calc(100vw-2rem)] max-h-[min(400px,60vh)] flex flex-col bg-cc-card border border-cc-border rounded-xl shadow-dropdown z-10 overflow-hidden animate-[scaleIn_0.15s_ease-out]">
+                {/* Current path display */}
                 <div className="px-3 py-2 border-b border-cc-border flex items-center gap-2 shrink-0">
-                  {showDirInput ? (
-                    <input
-                      type="text"
-                      value={dirInput}
-                      onChange={(e) => setDirInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && dirInput.trim()) {
-                          setCwd(dirInput.trim());
-                          addRecentDir(dirInput.trim());
-                          setShowDirDropdown(false);
-                          setShowDirInput(false);
-                        }
-                        if (e.key === "Escape") {
-                          setShowDirInput(false);
-                        }
-                      }}
-                      placeholder="/path/to/project"
-                      className="flex-1 px-2 py-1 text-xs bg-cc-input-bg border border-cc-border rounded-md text-cc-fg font-mono-code placeholder:text-cc-muted focus:outline-none focus:border-cc-primary/50"
-                      autoFocus
-                    />
-                  ) : (
-                    <>
-                      <span className="text-[10px] text-cc-muted font-mono-code truncate flex-1">{browsePath}</span>
-                      <button
-                        onClick={() => { setShowDirInput(true); setDirInput(cwd); }}
-                        className="text-[10px] text-cc-muted hover:text-cc-fg shrink-0 cursor-pointer"
-                        title="Type path manually"
-                      >
-                        <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3">
-                          <path d="M11.013 1.427a1.75 1.75 0 012.474 0l1.086 1.086a1.75 1.75 0 010 2.474l-8.61 8.61c-.21.21-.47.364-.756.445l-3.251.93a.75.75 0 01-.927-.928l.929-3.25a1.75 1.75 0 01.445-.758l8.61-8.61zm1.414 1.06a.25.25 0 00-.354 0L3.463 11.098a.25.25 0 00-.064.108l-.563 1.97 1.971-.564a.25.25 0 00.108-.064l8.61-8.61a.25.25 0 000-.354l-1.098-1.097z" />
-                        </svg>
-                      </button>
-                    </>
-                  )}
+                  <span className="text-[10px] text-cc-muted font-mono-code truncate flex-1">{browsePath}</span>
                 </div>
 
-                {/* Directory browser */}
-                {!showDirInput && (
-                  <>
-                    {/* Go up button */}
-                    {browsePath && browsePath !== "/" && (
-                      <button
-                        onClick={() => {
-                          const parent = browsePath.split("/").slice(0, -1).join("/") || "/";
-                          loadDirs(parent);
-                        }}
-                        className="w-full px-3 py-1.5 text-xs text-left hover:bg-cc-hover transition-colors cursor-pointer flex items-center gap-2 text-cc-muted"
-                      >
-                        <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 opacity-60">
-                          <path d="M8 12l-4-4h2.5V4h3v4H12L8 12z" transform="rotate(180 8 8)" />
-                        </svg>
-                        <span>..</span>
-                      </button>
-                    )}
-
-                    {/* Select current directory */}
-                    <button
-                      onClick={() => {
-                        setCwd(browsePath);
-                        addRecentDir(browsePath);
+                {/* Open Finder button */}
+                <button
+                  onClick={async () => {
+                    if (pickingFolder) return;
+                    setPickingFolder(true);
+                    try {
+                      const result = await api.pickFolder();
+                      if (result.path) {
+                        setCwd(result.path);
+                        addRecentDir(result.path);
+                        setRecentDirs(getRecentDirs());
                         setShowDirDropdown(false);
-                      }}
-                      className="w-full px-3 py-1.5 text-xs text-left hover:bg-cc-hover transition-colors cursor-pointer flex items-center gap-2 text-cc-primary font-medium border-b border-cc-border"
-                    >
-                      <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 shrink-0">
-                        <path d="M12.416 3.376a.75.75 0 01.208 1.04l-5 7.5a.75.75 0 01-1.154.114l-3-3a.75.75 0 011.06-1.06l2.353 2.353 4.493-6.74a.75.75 0 011.04-.207z" />
-                      </svg>
-                      <span className="truncate font-mono-code">Select: {browsePath.split("/").pop() || "/"}</span>
-                    </button>
+                      }
+                    } catch { /* ignore */ } finally {
+                      setPickingFolder(false);
+                    }
+                  }}
+                  disabled={pickingFolder}
+                  className="w-full px-3 py-2 text-xs text-left hover:bg-cc-hover transition-colors cursor-pointer flex items-center gap-2 text-cc-primary font-medium border-b border-cc-border disabled:opacity-50"
+                >
+                  <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5 shrink-0">
+                    <path d="M1 3.5A1.5 1.5 0 012.5 2h3.379a1.5 1.5 0 011.06.44l.622.621a.5.5 0 00.353.146H13.5A1.5 1.5 0 0115 4.707V12.5a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 011 12.5v-9z" />
+                  </svg>
+                  {pickingFolder ? "Waiting for Finder..." : "Open Finder..."}
+                </button>
 
-                    {/* Subdirectories */}
-                    <div className="flex-1 min-h-0 overflow-y-auto">
-                      {browseLoading ? (
-                        <div className="px-3 py-3 text-xs text-cc-muted text-center">Loading...</div>
-                      ) : browseDirs.length === 0 ? (
-                        <div className="px-3 py-3 text-xs text-cc-muted text-center">No subdirectories</div>
-                      ) : (
-                        browseDirs.map((d) => (
-                          <button
-                            key={d.path}
-                            onClick={() => loadDirs(d.path)}
-                            onDoubleClick={() => {
-                              setCwd(d.path);
-                              addRecentDir(d.path);
-                              setShowDirDropdown(false);
-                            }}
-                            className="w-full px-3 py-1.5 text-xs text-left hover:bg-cc-hover transition-colors cursor-pointer truncate font-mono-code flex items-center gap-2 text-cc-fg"
-                          >
-                            <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 opacity-40 shrink-0">
-                              <path d="M1 3.5A1.5 1.5 0 012.5 2h3.379a1.5 1.5 0 011.06.44l.622.621a.5.5 0 00.353.146H13.5A1.5 1.5 0 0115 4.707V12.5a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 011 12.5v-9z" />
-                            </svg>
-                            <span className="truncate">{d.name}</span>
-                            <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 opacity-30 shrink-0 ml-auto">
-                              <path d="M6 4l4 4-4 4" />
-                            </svg>
-                          </button>
-                        ))
-                      )}
-                    </div>
-                  </>
+                {/* Go up button */}
+                {browsePath && browsePath !== "/" && (
+                  <button
+                    onClick={() => {
+                      const parent = browsePath.split("/").slice(0, -1).join("/") || "/";
+                      loadDirs(parent);
+                    }}
+                    className="w-full px-3 py-1.5 text-xs text-left hover:bg-cc-hover transition-colors cursor-pointer flex items-center gap-2 text-cc-muted"
+                  >
+                    <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 opacity-60">
+                      <path d="M8 12l-4-4h2.5V4h3v4H12L8 12z" transform="rotate(180 8 8)" />
+                    </svg>
+                    <span>..</span>
+                  </button>
                 )}
+
+                {/* Select current directory */}
+                <button
+                  onClick={() => {
+                    setCwd(browsePath);
+                    addRecentDir(browsePath);
+                    setRecentDirs(getRecentDirs());
+                    setShowDirDropdown(false);
+                  }}
+                  className="w-full px-3 py-1.5 text-xs text-left hover:bg-cc-hover transition-colors cursor-pointer flex items-center gap-2 text-cc-primary font-medium border-b border-cc-border"
+                >
+                  <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 shrink-0">
+                    <path d="M12.416 3.376a.75.75 0 01.208 1.04l-5 7.5a.75.75 0 01-1.154.114l-3-3a.75.75 0 011.06-1.06l2.353 2.353 4.493-6.74a.75.75 0 011.04-.207z" />
+                  </svg>
+                  <span className="truncate font-mono-code">Select: {browsePath.split("/").pop() || "/"}</span>
+                </button>
+
+                {/* Subdirectories */}
+                <div className="flex-1 min-h-0 overflow-y-auto">
+                  {browseLoading ? (
+                    <div className="px-3 py-3 text-xs text-cc-muted text-center">Loading...</div>
+                  ) : browseDirs.length === 0 ? (
+                    <div className="px-3 py-3 text-xs text-cc-muted text-center">No subdirectories</div>
+                  ) : (
+                    browseDirs.map((d) => (
+                      <button
+                        key={d.path}
+                        onClick={() => loadDirs(d.path)}
+                        onDoubleClick={() => {
+                          setCwd(d.path);
+                          addRecentDir(d.path);
+                          setRecentDirs(getRecentDirs());
+                          setShowDirDropdown(false);
+                        }}
+                        className="w-full px-3 py-1.5 text-xs text-left hover:bg-cc-hover transition-colors cursor-pointer truncate font-mono-code flex items-center gap-2 text-cc-fg"
+                      >
+                        <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 opacity-40 shrink-0">
+                          <path d="M1 3.5A1.5 1.5 0 012.5 2h3.379a1.5 1.5 0 011.06.44l.622.621a.5.5 0 00.353.146H13.5A1.5 1.5 0 0115 4.707V12.5a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 011 12.5v-9z" />
+                        </svg>
+                        <span className="truncate">{d.name}</span>
+                        <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 opacity-30 shrink-0 ml-auto">
+                          <path d="M6 4l4 4-4 4" />
+                        </svg>
+                      </button>
+                    ))
+                  )}
+                </div>
               </div>
             )}
           </div>
@@ -568,20 +621,20 @@ export function HomePage() {
                   setShowBranchDropdown(!showBranchDropdown);
                   setBranchFilter("");
                 }}
-                className="flex items-center gap-1.5 px-2 py-1 text-xs rounded-md transition-colors cursor-pointer text-cc-muted hover:text-cc-fg hover:bg-cc-hover"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-lg transition-all duration-150 cursor-pointer text-cc-muted hover:text-cc-fg hover:bg-cc-hover btn-press"
               >
-                <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 opacity-60">
+                <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 opacity-50">
                   <path d="M5 3.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm0 2.122a2.25 2.25 0 10-1.5 0v.378A2.5 2.5 0 007.5 8h1a1 1 0 010 2h-1A2.5 2.5 0 005 12.5v.128a2.25 2.25 0 101.5 0V12.5a1 1 0 011-1h1a2.5 2.5 0 000-5h-1a1 1 0 01-1-1V5.372zM4.25 12a.75.75 0 100 1.5.75.75 0 000-1.5z" />
                 </svg>
-                <span className="max-w-[160px] truncate font-mono-code">
+                <span className="max-w-[160px] truncate font-mono-code text-[11px]">
                   {worktreeBranch || gitRepoInfo.currentBranch}
                 </span>
-                <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 opacity-50">
+                <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 opacity-40">
                   <path d="M4 6l4 4 4-4" />
                 </svg>
               </button>
               {showBranchDropdown && (
-                <div className="absolute left-0 top-full mt-1 w-72 max-w-[calc(100vw-2rem)] bg-cc-card border border-cc-border rounded-[10px] shadow-lg z-10 overflow-hidden">
+                <div className="absolute left-0 top-full mt-1 w-72 max-w-[calc(100vw-2rem)] bg-cc-card border border-cc-border rounded-xl shadow-dropdown z-10 overflow-hidden animate-[scaleIn_0.15s_ease-out]">
                   {/* Search/filter input */}
                   <div className="px-2 py-2 border-b border-cc-border">
                     <input
@@ -589,7 +642,7 @@ export function HomePage() {
                       value={branchFilter}
                       onChange={(e) => setBranchFilter(e.target.value)}
                       placeholder="Filter or create branch..."
-                      className="w-full px-2 py-1 text-xs bg-cc-input-bg border border-cc-border rounded-md text-cc-fg font-mono-code placeholder:text-cc-muted focus:outline-none focus:border-cc-primary/50"
+                      className="w-full px-2 py-1 text-xs bg-cc-input-bg border border-cc-border rounded-lg text-cc-fg font-mono-code placeholder:text-cc-muted focus:outline-none focus:border-cc-primary/50"
                       autoFocus
                       onKeyDown={(e) => {
                         if (e.key === "Escape") {
@@ -612,7 +665,7 @@ export function HomePage() {
                           {/* Local branches */}
                           {localBranches.length > 0 && (
                             <>
-                              <div className="px-3 py-1 text-[10px] text-cc-muted uppercase tracking-wider">Local</div>
+                              <div className="px-3 py-1 text-[10px] text-cc-muted uppercase tracking-wider font-sans-ui">Local</div>
                               {localBranches.map((b) => (
                                 <button
                                   key={b.name}
@@ -628,10 +681,10 @@ export function HomePage() {
                                   <span className="truncate font-mono-code">{b.name}</span>
                                   <span className="ml-auto flex items-center gap-1.5 shrink-0">
                                     {b.isCurrent && (
-                                      <span className="text-[9px] px-1 py-0.5 rounded bg-green-500/15 text-green-600 dark:text-green-400">current</span>
+                                      <span className="text-[9px] px-1 py-0.5 rounded-md bg-green-500/15 text-green-600 dark:text-green-400 font-sans-ui">current</span>
                                     )}
                                     {b.worktreePath && (
-                                      <span className="text-[9px] px-1 py-0.5 rounded bg-blue-500/15 text-blue-600 dark:text-blue-400">wt</span>
+                                      <span className="text-[9px] px-1 py-0.5 rounded-md bg-blue-500/15 text-blue-600 dark:text-blue-400 font-sans-ui">wt</span>
                                     )}
                                   </span>
                                 </button>
@@ -641,7 +694,7 @@ export function HomePage() {
                           {/* Remote branches */}
                           {remoteBranches.length > 0 && (
                             <>
-                              <div className="px-3 py-1 text-[10px] text-cc-muted uppercase tracking-wider mt-1">Remote</div>
+                              <div className="px-3 py-1 text-[10px] text-cc-muted uppercase tracking-wider mt-1 font-sans-ui">Remote</div>
                               {remoteBranches.map((b) => (
                                 <button
                                   key={`remote-${b.name}`}
@@ -655,7 +708,7 @@ export function HomePage() {
                                   }`}
                                 >
                                   <span className="truncate font-mono-code">{b.name}</span>
-                                  <span className="text-[9px] px-1 py-0.5 rounded bg-cc-hover text-cc-muted ml-auto shrink-0">remote</span>
+                                  <span className="text-[9px] px-1 py-0.5 rounded-md bg-cc-hover text-cc-muted ml-auto shrink-0 font-sans-ui">remote</span>
                                 </button>
                               ))}
                             </>
@@ -695,14 +748,14 @@ export function HomePage() {
           {gitRepoInfo && (
             <button
               onClick={() => setUseWorktree(!useWorktree)}
-              className={`flex items-center gap-1.5 px-2 py-1 text-xs rounded-md transition-colors cursor-pointer ${
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-lg transition-all duration-150 cursor-pointer btn-press ${
                 useWorktree
                   ? "bg-cc-primary/15 text-cc-primary font-medium"
                   : "text-cc-muted hover:text-cc-fg hover:bg-cc-hover"
               }`}
               title="Create an isolated worktree for this session"
             >
-              <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5 opacity-70">
+              <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5 opacity-60">
                 <path d="M5 3.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm0 2.122a2.25 2.25 0 10-1.5 0v5.256a2.25 2.25 0 101.5 0V5.372zM4.25 12a.75.75 0 100 1.5.75.75 0 000-1.5zm7.5-9.5a.75.75 0 100 1.5.75.75 0 000-1.5zm-2.25.75a2.25 2.25 0 113 2.122V7A2.5 2.5 0 0110 9.5H6a1 1 0 000 2h4a2.5 2.5 0 012.5 2.5v.628a2.25 2.25 0 11-1.5 0V14a1 1 0 00-1-1H6a2.5 2.5 0 01-2.5-2.5V10a2.5 2.5 0 012.5-2.5h4a1 1 0 001-1V5.372a2.25 2.25 0 01-1.5-2.122z" />
               </svg>
               <span>Worktree</span>
@@ -718,20 +771,20 @@ export function HomePage() {
                 }
                 setShowEnvDropdown(!showEnvDropdown);
               }}
-              className="flex items-center gap-1.5 px-2 py-1 text-xs text-cc-muted hover:text-cc-fg rounded-md hover:bg-cc-hover transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-cc-muted hover:text-cc-fg rounded-lg hover:bg-cc-hover transition-all duration-150 cursor-pointer btn-press"
             >
-              <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5 opacity-60">
+              <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5 opacity-50">
                 <path d="M8 1a2 2 0 012 2v1h2a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6a2 2 0 012-2h2V3a2 2 0 012-2zm0 1.5a.5.5 0 00-.5.5v1h1V3a.5.5 0 00-.5-.5zM4 5.5a.5.5 0 00-.5.5v6a.5.5 0 00.5.5h8a.5.5 0 00.5-.5V6a.5.5 0 00-.5-.5H4z" />
               </svg>
               <span className="max-w-[120px] truncate">
                 {selectedEnv ? envs.find((e) => e.slug === selectedEnv)?.name || "Env" : "No env"}
               </span>
-              <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 opacity-50">
+              <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 opacity-40">
                 <path d="M4 6l4 4 4-4" />
               </svg>
             </button>
             {showEnvDropdown && (
-              <div className="absolute left-0 top-full mt-1 w-56 bg-cc-card border border-cc-border rounded-[10px] shadow-lg z-10 py-1 overflow-hidden">
+              <div className="absolute left-0 top-full mt-1 w-56 bg-cc-card border border-cc-border rounded-xl shadow-dropdown z-10 py-1 overflow-hidden animate-[scaleIn_0.15s_ease-out]">
                 <button
                   onClick={() => {
                     setSelectedEnv("");
@@ -781,16 +834,16 @@ export function HomePage() {
           <div className="relative" ref={modelDropdownRef}>
             <button
               onClick={() => setShowModelDropdown(!showModelDropdown)}
-              className="flex items-center gap-1.5 px-2 py-1 text-xs text-cc-muted hover:text-cc-fg rounded-md hover:bg-cc-hover transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-cc-muted hover:text-cc-fg rounded-lg hover:bg-cc-hover transition-all duration-150 cursor-pointer btn-press"
             >
               <span>{selectedModel.icon}</span>
               <span>{selectedModel.label}</span>
-              <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 opacity-50">
+              <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 opacity-40">
                 <path d="M4 6l4 4 4-4" />
               </svg>
             </button>
             {showModelDropdown && (
-              <div className="absolute left-0 top-full mt-1 w-44 bg-cc-card border border-cc-border rounded-[10px] shadow-lg z-10 py-1 overflow-hidden">
+              <div className="absolute left-0 top-full mt-1 w-44 bg-cc-card border border-cc-border rounded-xl shadow-dropdown z-10 py-1 overflow-hidden animate-[scaleIn_0.15s_ease-out]">
                 {MODELS.map((m) => (
                   <button
                     key={m.value}
@@ -808,9 +861,35 @@ export function HomePage() {
           </div>
         </div>
 
+        {/* Quick-start suggestions */}
+        {!text && (
+          <div className="flex items-center gap-2 mt-4 px-1 flex-wrap">
+            {[
+              { label: "Fix a bug", icon: "M6 9l2 2 4-4" },
+              { label: "Write tests", icon: "M3 4h10M3 8h10M3 12h6" },
+              { label: "Refactor code", icon: "M4 6l4 4-4 4" },
+              { label: "Review changes", icon: "M8 2a6 6 0 100 12A6 6 0 008 2zm1 3H7v4h2V5zm0 6H7v-1.5h2V11z" },
+            ].map((s) => (
+              <button
+                key={s.label}
+                onClick={() => {
+                  setText(s.label);
+                  textareaRef.current?.focus();
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-cc-muted hover:text-cc-fg rounded-lg border border-cc-border hover:border-cc-primary/30 hover:bg-cc-hover transition-all duration-150 cursor-pointer btn-press"
+              >
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3 h-3 opacity-50">
+                  <path d={s.icon} strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                {s.label}
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* Error message */}
         {error && (
-          <div className="mt-3 flex items-center gap-2 px-3 py-2 rounded-lg bg-cc-error/5 border border-cc-error/20">
+          <div className="mt-3 flex items-center gap-2 px-4 py-2.5 rounded-xl bg-cc-error/5 border border-cc-error/20 animate-[fadeSlideIn_0.2s_ease-out]">
             <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5 text-cc-error shrink-0">
               <path fillRule="evenodd" d="M8 15A7 7 0 108 1a7 7 0 000 14zm1-3a1 1 0 11-2 0 1 1 0 012 0zM7.5 5.5a.5.5 0 011 0v3a.5.5 0 01-1 0v-3z" clipRule="evenodd" />
             </svg>

@@ -453,6 +453,16 @@ export function Composer({ sessionId }: { sessionId: string }) {
             </div>
           </div>
         </div>
+
+        {/* Keyboard hints */}
+        {isConnected && !text && (
+          <div className="flex items-center gap-3 mt-1.5 px-1 text-[10px] text-cc-muted/60">
+            <span><kbd className="font-mono-code">Enter</kbd> send</span>
+            <span><kbd className="font-mono-code">Shift+Enter</kbd> newline</span>
+            <span><kbd className="font-mono-code">/</kbd> commands</span>
+            <span><kbd className="font-mono-code">Shift+Tab</kbd> toggle mode</span>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useStore } from "../store.js";
@@ -25,9 +25,11 @@ function suggestionLabel(s: PermissionUpdate): string {
 export function PermissionBanner({
   permission,
   sessionId,
+  isFirst = false,
 }: {
   permission: PermissionRequest;
   sessionId: string;
+  isFirst?: boolean;
 }) {
   const [loading, setLoading] = useState(false);
   const removePermission = useStore((s) => s.removePermission);
@@ -57,6 +59,30 @@ export function PermissionBanner({
 
   const isAskUser = permission.tool_name === "AskUserQuestion";
   const suggestions = permission.permission_suggestions;
+
+  // Keyboard shortcuts (only for the first/top permission)
+  useEffect(() => {
+    if (!isFirst || loading || isAskUser) return;
+    function handleKey(e: KeyboardEvent) {
+      // Ignore if user is typing in an input
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.key === "Enter") {
+        e.preventDefault();
+        handleAllow();
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        handleDeny();
+      } else if (suggestions?.length) {
+        const idx = parseInt(e.key, 10) - 1;
+        if (idx >= 0 && idx < suggestions.length) {
+          e.preventDefault();
+          handleAllow(undefined, [suggestions[idx]]);
+        }
+      }
+    }
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [isFirst, loading, isAskUser, suggestions]);
 
   return (
     <div className="px-4 py-3 border-b border-cc-border animate-[fadeSlideIn_0.2s_ease-out]">
@@ -112,6 +138,7 @@ export function PermissionBanner({
                     <path d="M3 8.5l3.5 3.5 6.5-7" />
                   </svg>
                   Allow
+                  {isFirst && <kbd className="ml-1 px-1 py-0.5 rounded bg-white/20 text-[10px] font-mono-code">↵</kbd>}
                 </button>
 
                 {/* Permission suggestion buttons — only when CLI provides them */}
@@ -127,6 +154,7 @@ export function PermissionBanner({
                       <path d="M3 8.5l3.5 3.5 6.5-7" />
                     </svg>
                     {suggestionLabel(suggestion)}
+                    {isFirst && <kbd className="ml-1 px-1 py-0.5 rounded bg-cc-primary/20 text-[10px] font-mono-code">{i + 1}</kbd>}
                   </button>
                 ))}
 
@@ -139,6 +167,7 @@ export function PermissionBanner({
                     <path d="M4 4l8 8M12 4l-8 8" />
                   </svg>
                   Deny
+                  {isFirst && <kbd className="ml-1 px-1 py-0.5 rounded bg-cc-border text-[10px] font-mono-code text-cc-muted">esc</kbd>}
                 </button>
               </div>
             )}

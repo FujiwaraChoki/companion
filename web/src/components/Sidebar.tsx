@@ -1,8 +1,19 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useStore } from "../store.js";
 import { api } from "../api.js";
 import { connectSession, disconnectSession } from "../ws.js";
 import { EnvManager } from "./EnvManager.js";
+
+const isElectron = !!(window as any).electronAPI?.isElectron;
+
+function useDebouncedValue<T>(value: T, delay: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(timer);
+  }, [value, delay]);
+  return debounced;
+}
 
 export function Sidebar() {
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
@@ -10,6 +21,10 @@ export function Sidebar() {
   const [showEnvManager, setShowEnvManager] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
   const [confirmArchiveId, setConfirmArchiveId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [hiddenSessionIds, setHiddenSessionIds] = useState<Set<string>>(new Set());
+  const archiveTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const debouncedSearch = useDebouncedValue(searchQuery, 200);
   const editInputRef = useRef<HTMLInputElement>(null);
   const sessions = useStore((s) => s.sessions);
   const sdkSessions = useStore((s) => s.sdkSessions);
@@ -108,8 +123,49 @@ export function Sidebar() {
       setConfirmArchiveId(sessionId);
       return;
     }
-    doArchive(sessionId);
+    doArchiveWithUndo(sessionId);
   }, [sdkSessions, sessions]);
+
+  const doArchiveWithUndo = useCallback((sessionId: string) => {
+    // Optimistically hide session
+    setHiddenSessionIds((prev) => new Set(prev).add(sessionId));
+    if (useStore.getState().currentSessionId === sessionId) {
+      useStore.getState().newSession();
+    }
+    // Set a timer to actually archive
+    const timer = setTimeout(async () => {
+      archiveTimers.current.delete(sessionId);
+      try {
+        disconnectSession(sessionId);
+        await api.archiveSession(sessionId);
+      } catch {
+        // best-effort
+      }
+      setHiddenSessionIds((prev) => { const n = new Set(prev); n.delete(sessionId); return n; });
+      try {
+        const list = await api.listSessions();
+        useStore.getState().setSdkSessions(list);
+      } catch {
+        // best-effort
+      }
+    }, 5000);
+    archiveTimers.current.set(sessionId, timer);
+
+    // Show toast with undo
+    useStore.getState().addToast({
+      message: "Session archived",
+      variant: "info",
+      duration: 5000,
+      action: {
+        label: "Undo",
+        onClick: () => {
+          const t = archiveTimers.current.get(sessionId);
+          if (t) { clearTimeout(t); archiveTimers.current.delete(sessionId); }
+          setHiddenSessionIds((prev) => { const n = new Set(prev); n.delete(sessionId); return n; });
+        },
+      },
+    });
+  }, []);
 
   const doArchive = useCallback(async (sessionId: string, force?: boolean) => {
     try {
@@ -181,8 +237,28 @@ export function Sidebar() {
     };
   }).sort((a, b) => b.createdAt - a.createdAt);
 
-  const activeSessions = allSessionList.filter((s) => !s.archived);
-  const archivedSessions = allSessionList.filter((s) => s.archived);
+  const filteredSessionList = useMemo(() => {
+    // Hide optimistically archived sessions
+    let list = allSessionList.filter((s) => !hiddenSessionIds.has(s.id));
+    // Apply search filter
+    if (debouncedSearch.trim()) {
+      const q = debouncedSearch.toLowerCase();
+      list = list.filter((s) => {
+        const name = sessionNames.get(s.id) || "";
+        return (
+          name.toLowerCase().includes(q) ||
+          s.cwd.toLowerCase().includes(q) ||
+          s.gitBranch.toLowerCase().includes(q) ||
+          s.model.toLowerCase().includes(q) ||
+          s.id.toLowerCase().includes(q)
+        );
+      });
+    }
+    return list;
+  }, [allSessionList, hiddenSessionIds, debouncedSearch, sessionNames]);
+
+  const activeSessions = filteredSessionList.filter((s) => !s.archived);
+  const archivedSessions = filteredSessionList.filter((s) => s.archived);
 
   function renderSessionItem(s: typeof allSessionList[number], options?: { isArchived?: boolean }) {
     const isActive = currentSessionId === s.id;
@@ -348,25 +424,53 @@ export function Sidebar() {
   return (
     <aside className="w-[260px] h-full flex flex-col bg-cc-sidebar border-r border-cc-border">
       {/* Header */}
-      <div className="p-4 pb-3">
-        <div className="flex items-center gap-2 mb-4">
-          <div className="w-7 h-7 rounded-lg bg-cc-primary flex items-center justify-center">
-            <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4 text-white">
-              <path d="M8 9h8M8 13h5M21 12c0 4.97-4.03 9-9 9a8.96 8.96 0 01-4.57-1.24L3 21l1.24-4.43A8.96 8.96 0 013 12c0-4.97 4.03-9 9-9s9 4.03 9 9z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </div>
-          <span className="text-sm font-semibold text-cc-fg tracking-tight">The Vibe Companion</span>
+      <div className={`p-4 pb-3 ${isElectron ? "pt-10" : ""}`}>
+        <div className="flex items-center gap-2.5 mb-4">
+          <img src={darkMode ? "/icon-dark.svg" : "/icon-light.svg"} alt="Companion" className="w-7 h-7 rounded-lg shadow-sm" />
+          <span className="text-sm font-semibold text-cc-fg tracking-tight font-display flex-1">Companion</span>
+          <button
+            onClick={toggleDarkMode}
+            className="flex items-center justify-center w-7 h-7 rounded-lg text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-all duration-150 cursor-pointer btn-press"
+            title={darkMode ? "Switch to light mode" : "Switch to dark mode"}
+          >
+            {darkMode ? (
+              <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+                <path fillRule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clipRule="evenodd" />
+              </svg>
+            ) : (
+              <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+                <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z" />
+              </svg>
+            )}
+          </button>
         </div>
 
         <button
           onClick={handleNewSession}
-          className="w-full py-2 px-3 text-sm font-medium rounded-[10px] bg-cc-primary hover:bg-cc-primary-hover text-white transition-colors duration-150 flex items-center justify-center gap-1.5 cursor-pointer"
+          className="w-full py-2.5 px-3 text-sm font-medium rounded-xl bg-cc-primary hover:bg-cc-primary-hover text-white transition-all duration-150 flex items-center justify-center gap-1.5 cursor-pointer shadow-sm hover:shadow-md btn-press"
         >
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5">
             <path d="M8 3v10M3 8h10" />
           </svg>
           New Session
         </button>
+      </div>
+
+      {/* Session search */}
+      <div className="px-4 pb-2">
+        <div className="relative">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-cc-muted pointer-events-none">
+            <circle cx="7" cy="7" r="4.5" />
+            <path d="M10.5 10.5L14 14" strokeLinecap="round" />
+          </svg>
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search sessions..."
+            className="w-full pl-8 pr-2 py-1.5 text-xs bg-cc-hover/50 border border-cc-border rounded-lg text-cc-fg placeholder:text-cc-muted focus:outline-none focus:border-cc-primary/30 transition-colors"
+          />
+        </div>
       </div>
 
       {/* Worktree archive confirmation */}
@@ -434,30 +538,15 @@ export function Sidebar() {
       </div>
 
       {/* Footer */}
-      <div className="p-3 border-t border-cc-border space-y-0.5">
+      <div className="p-3 border-t border-cc-border">
         <button
           onClick={() => setShowEnvManager(true)}
-          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-[10px] text-sm text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
+          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-all duration-150 cursor-pointer btn-press"
         >
-          <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4">
+          <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4 opacity-60">
             <path d="M8 1a2 2 0 012 2v1h2a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6a2 2 0 012-2h2V3a2 2 0 012-2zm0 1.5a.5.5 0 00-.5.5v1h1V3a.5.5 0 00-.5-.5zM4 5.5a.5.5 0 00-.5.5v6a.5.5 0 00.5.5h8a.5.5 0 00.5-.5V6a.5.5 0 00-.5-.5H4z" />
           </svg>
           <span>Environments</span>
-        </button>
-        <button
-          onClick={toggleDarkMode}
-          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-[10px] text-sm text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
-        >
-          {darkMode ? (
-            <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
-              <path fillRule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clipRule="evenodd" />
-            </svg>
-          ) : (
-            <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
-              <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z" />
-            </svg>
-          )}
-          <span>{darkMode ? "Light mode" : "Dark mode"}</span>
         </button>
       </div>
 

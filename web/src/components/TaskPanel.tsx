@@ -18,10 +18,10 @@ export function TaskPanel({ sessionId }: { sessionId: string }) {
     <aside className="w-[280px] h-full flex flex-col bg-cc-card border-l border-cc-border">
       {/* Header */}
       <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b border-cc-border">
-        <span className="text-sm font-semibold text-cc-fg tracking-tight">Session</span>
+        <span className="text-sm font-semibold text-cc-fg tracking-tight font-display">Session</span>
         <button
           onClick={() => setTaskPanelOpen(false)}
-          className="flex items-center justify-center w-6 h-6 rounded-lg text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
+          className="flex items-center justify-center w-6 h-6 rounded-lg text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-all duration-150 cursor-pointer btn-press"
         >
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3.5 h-3.5">
             <path d="M4 4l8 8M12 4l-8 8" />
@@ -31,26 +31,26 @@ export function TaskPanel({ sessionId }: { sessionId: string }) {
 
       {/* Session stats */}
       {session && (
-        <div className="shrink-0 px-4 py-3 border-b border-cc-border space-y-2.5">
+        <div className="shrink-0 px-4 py-3 border-b border-cc-border space-y-3">
           {/* Cost */}
           <div className="flex items-center justify-between">
-            <span className="text-[11px] text-cc-muted uppercase tracking-wider">Cost</span>
-            <span className="text-[13px] font-medium text-cc-fg tabular-nums">
+            <span className="text-[11px] text-cc-muted uppercase tracking-wider font-medium">Cost</span>
+            <span className="text-[13px] font-semibold text-cc-fg tabular-nums font-mono-code">
               ${session.total_cost_usd.toFixed(4)}
             </span>
           </div>
 
           {/* Context usage */}
-          <div className="space-y-1">
+          <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] text-cc-muted uppercase tracking-wider">Context</span>
-              <span className="text-[11px] text-cc-muted tabular-nums">
+              <span className="text-[11px] text-cc-muted uppercase tracking-wider font-medium">Context</span>
+              <span className="text-[11px] text-cc-muted tabular-nums font-mono-code">
                 {contextPct > 0 ? `${contextPct}%` : "--"}
               </span>
             </div>
             <div className="w-full h-1.5 rounded-full bg-cc-hover overflow-hidden">
               <div
-                className={`h-full rounded-full transition-all duration-500 ${
+                className={`h-full rounded-full transition-all duration-700 ease-out ${
                   contextPct > 80
                     ? "bg-cc-error"
                     : contextPct > 50
@@ -64,19 +64,29 @@ export function TaskPanel({ sessionId }: { sessionId: string }) {
 
           {/* Turns */}
           <div className="flex items-center justify-between">
-            <span className="text-[11px] text-cc-muted uppercase tracking-wider">Turns</span>
-            <span className="text-[13px] font-medium text-cc-fg tabular-nums">
+            <span className="text-[11px] text-cc-muted uppercase tracking-wider font-medium">Turns</span>
+            <span className="text-[13px] font-semibold text-cc-fg tabular-nums font-mono-code">
               {session.num_turns}
             </span>
           </div>
+
+          {/* Model */}
+          {session.model && (
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] text-cc-muted uppercase tracking-wider font-medium">Model</span>
+              <span className="text-[11px] font-medium text-cc-fg font-mono-code">
+                {session.model.includes("opus") ? "Opus" : session.model.includes("sonnet") ? "Sonnet" : session.model.includes("haiku") ? "Haiku" : session.model}
+              </span>
+            </div>
+          )}
         </div>
       )}
 
       {/* Task section header */}
       <div className="shrink-0 px-4 py-2.5 border-b border-cc-border flex items-center justify-between">
-        <span className="text-[12px] font-semibold text-cc-fg">Tasks</span>
+        <span className="text-[12px] font-semibold text-cc-fg font-display">Tasks</span>
         {tasks.length > 0 && (
-          <span className="text-[11px] text-cc-muted tabular-nums">
+          <span className="text-[11px] text-cc-muted tabular-nums font-mono-code">
             {completedCount}/{tasks.length}
           </span>
         )}

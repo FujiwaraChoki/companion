@@ -161,6 +161,24 @@ export function createRoutes(launcher: CliLauncher, wsBridge: WsBridge, sessionS
     return c.json({ home: homedir(), cwd: process.cwd() });
   });
 
+  api.post("/fs/pick-folder", async (c) => {
+    if (process.platform !== "darwin") {
+      return c.json({ error: "Folder picker is only supported on macOS" }, 400);
+    }
+    try {
+      const result = execSync(
+        `osascript -e 'POSIX path of (choose folder)'`,
+        { encoding: "utf-8", timeout: 60000 }
+      ).trim();
+      // osascript returns path with trailing slash, remove it
+      const path = result.endsWith("/") ? result.slice(0, -1) : result;
+      return c.json({ path });
+    } catch {
+      // User cancelled the dialog
+      return c.json({ cancelled: true });
+    }
+  });
+
   // ─── Environments (~/.companion/envs/) ────────────────────────────
 
   api.get("/envs", (c) => {

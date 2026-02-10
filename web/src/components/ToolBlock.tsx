@@ -29,6 +29,16 @@ export function getToolLabel(name: string): string {
   return name;
 }
 
+export function getToolBorderColor(name: string): string {
+  if (name === "Bash") return "border-l-blue-400/60";
+  if (name === "Read" || name === "Write" || name === "Edit" || name === "NotebookEdit") return "border-l-emerald-400/60";
+  if (name === "Glob" || name === "Grep") return "border-l-violet-400/60";
+  if (name === "WebFetch" || name === "WebSearch") return "border-l-amber-400/60";
+  if (name === "Task" || name === "TaskCreate" || name === "TaskUpdate") return "border-l-cyan-400/60";
+  if (name === "SendMessage") return "border-l-pink-400/60";
+  return "border-l-cc-muted/30";
+}
+
 export function ToolBlock({
   name,
   input,
@@ -45,16 +55,18 @@ export function ToolBlock({
   // Extract the most useful preview
   const preview = getPreview(name, input);
 
+  const borderColor = getToolBorderColor(name);
+
   return (
-    <div className="border border-cc-border rounded-[10px] overflow-hidden bg-cc-card">
+    <div className={`border border-cc-border border-l-[3px] ${borderColor} rounded-xl overflow-hidden bg-cc-card shadow-card`}>
       <button
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-cc-hover transition-colors cursor-pointer"
+        className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left hover:bg-cc-hover transition-all duration-150 cursor-pointer"
       >
         <svg
           viewBox="0 0 16 16"
           fill="currentColor"
-          className={`w-3 h-3 text-cc-muted transition-transform shrink-0 ${open ? "rotate-90" : ""}`}
+          className={`w-3 h-3 text-cc-muted transition-transform duration-200 shrink-0 ${open ? "rotate-90" : ""}`}
         >
           <path d="M6 4l4 4-4 4" />
         </svg>
@@ -68,10 +80,10 @@ export function ToolBlock({
       </button>
 
       {open && (
-        <div className="px-3 pb-3 pt-0 border-t border-cc-border">
+        <div className="px-3 pb-3 pt-0 border-t border-cc-border animate-[fadeIn_0.15s_ease-out]">
           <div className="mt-2">
             {name === "Bash" && typeof input.command === "string" ? (
-              <pre className="px-3 py-2 rounded-lg bg-cc-code-bg text-cc-code-fg text-[12px] font-mono-code leading-relaxed overflow-x-auto">
+              <pre className="px-3 py-2.5 rounded-xl bg-cc-code-bg text-cc-code-fg text-[12px] font-mono-code leading-relaxed overflow-x-auto">
                 <span className="text-cc-muted select-none">$ </span>
                 {input.command}
               </pre>
@@ -104,16 +116,16 @@ function EditToolDetail({ input }: { input: Record<string, unknown> }) {
     <div className="space-y-2">
       <div className="text-xs text-cc-muted font-mono-code">{filePath}</div>
       {oldStr && (
-        <div className="rounded-lg overflow-hidden border border-cc-border">
-          <div className="px-2 py-1 bg-cc-error/5 text-[10px] text-cc-error font-mono-code">removed</div>
+        <div className="rounded-xl overflow-hidden border border-cc-border">
+          <div className="px-2.5 py-1 bg-cc-error/5 text-[10px] text-cc-error font-mono-code font-medium">removed</div>
           <pre className="px-3 py-2 bg-cc-code-bg text-cc-code-fg text-[11px] font-mono-code leading-relaxed overflow-x-auto max-h-32 overflow-y-auto">
             {oldStr}
           </pre>
         </div>
       )}
       {newStr && (
-        <div className="rounded-lg overflow-hidden border border-cc-border">
-          <div className="px-2 py-1 bg-cc-success/5 text-[10px] text-cc-success font-mono-code">added</div>
+        <div className="rounded-xl overflow-hidden border border-cc-border">
+          <div className="px-2.5 py-1 bg-cc-success/5 text-[10px] text-cc-success font-mono-code font-medium">added</div>
           <pre className="px-3 py-2 bg-cc-code-bg text-cc-code-fg text-[11px] font-mono-code leading-relaxed overflow-x-auto max-h-32 overflow-y-auto">
             {newStr}
           </pre>

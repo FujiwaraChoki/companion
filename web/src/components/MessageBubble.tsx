@@ -2,7 +2,59 @@ import { useState, useMemo, type ComponentProps } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { ChatMessage, ContentBlock } from "../types.js";
-import { ToolBlock, getToolIcon, getToolLabel, getPreview, ToolIcon } from "./ToolBlock.js";
+import { ToolBlock, getToolIcon, getToolLabel, getToolBorderColor, getPreview, ToolIcon } from "./ToolBlock.js";
+import { useStore } from "../store.js";
+import hljs from "../utils/hljs.js";
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+
+  function handleCopy(e: React.MouseEvent) {
+    e.stopPropagation();
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
+  return (
+    <button
+      onClick={handleCopy}
+      className="absolute top-2 right-2 px-1.5 py-1 rounded-md bg-cc-fg/10 hover:bg-cc-fg/20 text-cc-code-fg/60 hover:text-cc-code-fg text-[11px] font-mono-code opacity-0 group-hover:opacity-100 transition-all cursor-pointer z-10"
+    >
+      {copied ? "Copied!" : (
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3.5 h-3.5">
+          <rect x="5" y="5" width="8" height="8" rx="1" />
+          <path d="M3 11V3h8" strokeLinecap="round" />
+        </svg>
+      )}
+    </button>
+  );
+}
+
+function MessageCopyButton({ text }: { text: string }) {
+  const addToast = useStore((s) => s.addToast);
+
+  function handleCopy(e: React.MouseEvent) {
+    e.stopPropagation();
+    navigator.clipboard.writeText(text).then(() => {
+      addToast({ message: "Message copied", variant: "success" });
+    });
+  }
+
+  return (
+    <button
+      onClick={handleCopy}
+      title="Copy message"
+      className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-md hover:bg-cc-hover text-cc-muted hover:text-cc-fg cursor-pointer"
+    >
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3.5 h-3.5">
+        <rect x="5" y="5" width="8" height="8" rx="1" />
+        <path d="M3 11V3h8" strokeLinecap="round" />
+      </svg>
+    </button>
+  );
+}
 
 export function MessageBubble({ message }: { message: ChatMessage }) {
   if (message.role === "system") {
@@ -18,33 +70,40 @@ export function MessageBubble({ message }: { message: ChatMessage }) {
   }
 
   if (message.role === "user") {
-    return (
-      <div className="flex justify-end animate-[fadeSlideIn_0.2s_ease-out]">
-        <div className="max-w-[80%] px-4 py-2.5 rounded-[14px] rounded-br-[4px] bg-cc-user-bubble text-cc-fg">
-          {message.images && message.images.length > 0 && (
-            <div className="flex gap-2 flex-wrap mb-2">
-              {message.images.map((img, i) => (
-                <img
-                  key={i}
-                  src={`data:${img.media_type};base64,${img.data}`}
-                  alt="attachment"
-                  className="max-w-[200px] max-h-[150px] rounded-lg object-cover"
-                />
-              ))}
-            </div>
-          )}
-          <pre className="text-[14px] whitespace-pre-wrap break-words font-sans-ui leading-relaxed">
-            {message.content}
-          </pre>
-        </div>
-      </div>
-    );
+    return <UserMessage message={message} />;
   }
 
   // Assistant message
   return (
-    <div className="animate-[fadeSlideIn_0.2s_ease-out]">
+    <div className="animate-[fadeSlideIn_0.2s_ease-out] group/msg">
       <AssistantMessage message={message} />
+    </div>
+  );
+}
+
+function UserMessage({ message }: { message: ChatMessage }) {
+  const setLightboxSrc = useStore((s) => s.setLightboxSrc);
+
+  return (
+    <div className="flex justify-end animate-[fadeSlideIn_0.2s_ease-out]">
+      <div className="max-w-[80%] px-4 py-3 rounded-2xl rounded-br-[6px] bg-cc-user-bubble text-cc-fg shadow-sm">
+        {message.images && message.images.length > 0 && (
+          <div className="flex gap-2 flex-wrap mb-2">
+            {message.images.map((img, i) => (
+              <img
+                key={i}
+                src={`data:${img.media_type};base64,${img.data}`}
+                alt="attachment"
+                className="max-w-[200px] max-h-[150px] rounded-xl object-cover cursor-pointer hover:opacity-80 transition-opacity"
+                onClick={() => setLightboxSrc(`data:${img.media_type};base64,${img.data}`)}
+              />
+            ))}
+          </div>
+        )}
+        <pre className="text-[14px] whitespace-pre-wrap break-words font-sans-ui leading-relaxed">
+          {message.content}
+        </pre>
+      </div>
     </div>
   );
 }
@@ -89,17 +148,18 @@ function AssistantMessage({ message }: { message: ChatMessage }) {
 
   if (blocks.length === 0 && message.content) {
     return (
-      <div className="flex items-start gap-3">
+      <div className="flex items-start gap-3 group">
         <AssistantAvatar />
         <div className="flex-1 min-w-0">
           <MarkdownContent text={message.content} />
         </div>
+        <MessageCopyButton text={message.content} />
       </div>
     );
   }
 
   return (
-    <div className="flex items-start gap-3">
+    <div className="flex items-start gap-3 group">
       <AssistantAvatar />
       <div className="flex-1 min-w-0 space-y-3">
         {grouped.map((group, i) => {
@@ -115,13 +175,14 @@ function AssistantMessage({ message }: { message: ChatMessage }) {
           return <ToolGroupBlock key={i} name={group.name} items={group.items} />;
         })}
       </div>
+      {message.content && <MessageCopyButton text={message.content} />}
     </div>
   );
 }
 
 function AssistantAvatar() {
   return (
-    <div className="w-6 h-6 rounded-full bg-cc-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+    <div className="w-6 h-6 rounded-lg bg-cc-primary/10 flex items-center justify-center shrink-0 mt-0.5">
       <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 text-cc-primary">
         <circle cx="8" cy="8" r="3" />
       </svg>
@@ -129,9 +190,26 @@ function AssistantAvatar() {
   );
 }
 
+function HighlightedCode({ code, lang }: { code: string; lang: string }) {
+  const highlighted = useMemo(() => {
+    if (!lang) return null;
+    try {
+      const result = hljs.highlight(code, { language: lang, ignoreIllegals: true });
+      return result.value;
+    } catch {
+      return null;
+    }
+  }, [code, lang]);
+
+  if (highlighted) {
+    return <code dangerouslySetInnerHTML={{ __html: highlighted }} />;
+  }
+  return <code>{code}</code>;
+}
+
 function MarkdownContent({ text }: { text: string }) {
   return (
-    <div className="markdown-body text-[15px] text-cc-fg leading-relaxed">
+    <div className="markdown-body text-[15px] text-cc-fg leading-[1.7]">
       <Markdown
         remarkPlugins={[remarkGfm]}
         components={{
@@ -182,22 +260,24 @@ function MarkdownContent({ text }: { text: string }) {
 
             if (isBlock) {
               const lang = match?.[1] || "";
+              const codeText = typeof children === "string" ? children : String(children ?? "");
               return (
-                <div className="my-2 rounded-lg overflow-hidden border border-cc-border">
+                <div className="my-3 rounded-xl overflow-hidden border border-cc-border shadow-card relative group">
                   {lang && (
                     <div className="px-3 py-1.5 bg-cc-code-bg/80 border-b border-cc-border text-[10px] text-cc-muted font-mono-code uppercase tracking-wider">
                       {lang}
                     </div>
                   )}
-                  <pre className="px-3 py-2.5 bg-cc-code-bg text-cc-code-fg text-[13px] font-mono-code leading-relaxed overflow-x-auto">
-                    <code>{children}</code>
+                  <CopyButton text={codeText.replace(/\n$/, "")} />
+                  <pre className="px-4 py-3 bg-cc-code-bg text-cc-code-fg text-[13px] font-mono-code leading-relaxed overflow-x-auto">
+                    <HighlightedCode code={codeText} lang={lang} />
                   </pre>
                 </div>
               );
             }
 
             return (
-              <code className="px-1 py-0.5 rounded bg-cc-code-bg/30 text-[13px] font-mono-code text-cc-primary">
+              <code className="px-1.5 py-0.5 rounded-md bg-cc-code-bg/20 text-[13px] font-mono-code text-cc-primary">
                 {children}
               </code>
             );
@@ -265,12 +345,13 @@ function ToolGroupBlock({ name, items }: { name: string; items: ToolGroupItem[] 
   const [open, setOpen] = useState(false);
   const iconType = getToolIcon(name);
   const label = getToolLabel(name);
+  const borderColor = getToolBorderColor(name);
 
   return (
-    <div className="border border-cc-border rounded-[10px] overflow-hidden bg-cc-card">
+    <div className={`border border-cc-border border-l-[3px] ${borderColor} rounded-xl overflow-hidden bg-cc-card shadow-card`}>
       <button
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-cc-hover transition-colors cursor-pointer"
+        className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left hover:bg-cc-hover transition-all duration-150 cursor-pointer"
       >
         <svg
           viewBox="0 0 16 16"
@@ -307,24 +388,29 @@ function ThinkingBlock({ text }: { text: string }) {
   const [open, setOpen] = useState(false);
 
   return (
-    <div className="border border-cc-border rounded-[10px] overflow-hidden">
+    <div className="border border-cc-border rounded-xl overflow-hidden bg-cc-card/50">
       <button
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center gap-2 px-3 py-2 text-xs text-cc-muted hover:bg-cc-hover transition-colors cursor-pointer"
+        className="w-full flex items-center gap-2 px-3 py-2.5 text-xs text-cc-muted hover:bg-cc-hover transition-all duration-150 cursor-pointer"
       >
         <svg
           viewBox="0 0 16 16"
           fill="currentColor"
-          className={`w-3 h-3 transition-transform ${open ? "rotate-90" : ""}`}
+          className={`w-3 h-3 transition-transform duration-200 ${open ? "rotate-90" : ""}`}
         >
           <path d="M6 4l4 4-4 4" />
         </svg>
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3.5 h-3.5 text-cc-muted/60">
+          <circle cx="8" cy="8" r="5" />
+          <path d="M6 6.5c0-.83.67-1.5 1.5-1.5h1c.83 0 1.5.67 1.5 1.5 0 .56-.32 1.07-.8 1.3l-.7.35V9" strokeLinecap="round" />
+          <circle cx="8" cy="10.5" r="0.5" fill="currentColor" stroke="none" />
+        </svg>
         <span className="font-medium">Thinking</span>
-        <span className="text-cc-muted/60">{text.length} chars</span>
+        <span className="text-cc-muted/40 font-mono-code text-[10px]">{text.length} chars</span>
       </button>
       {open && (
-        <div className="px-3 pb-3 pt-0">
-          <pre className="text-xs text-cc-muted font-mono-code whitespace-pre-wrap leading-relaxed max-h-60 overflow-y-auto">
+        <div className="px-3 pb-3 pt-0 border-t border-cc-border animate-[fadeIn_0.15s_ease-out]">
+          <pre className="mt-2 text-xs text-cc-muted font-mono-code whitespace-pre-wrap leading-relaxed max-h-60 overflow-y-auto">
             {text}
           </pre>
         </div>
